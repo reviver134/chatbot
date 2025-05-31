@@ -1,0 +1,6 @@
+echo "streamlit>=1.20.0
+langchain>=0.0.187
+langchain-community>=0.0.35
+chromadb>=0.3.24
+ollama>=0.1.5
+torch>=2.0.0" > requirements.txt
