@@ -73,7 +73,7 @@ def setup_qa():
 
 qa_chain, retriever, prompt_template = setup_qa()
 
-# Streamlit UI
+# Streamlit UI, That would soon be changed
 st.title("📚 RAG Chatbot with LangChain + Ollama")
 st.markdown("Ask me anything based on the content of `text.txt`.")
 
