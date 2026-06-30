@@ -1,0 +1,27 @@
+# Byte-compiled / optimized / DLL files
+__pycache__/
+*.py[cod]
+*$py.class
+
+# Local virtual environments
+.venv/
+venv/
+ENV/
+env/
+
+# Docker configuration modifications (if temporary)
+.wslconfig
+
+# Application & Database data
+.chroma/
+chroma_db/
+*.db
+*.sqlite
+
+# Streamlit local state and configuration
+.streamlit/config.toml
+.streamlit/secrets.toml
+
+# Operating System files
+.DS_Store
+Thumbs.db

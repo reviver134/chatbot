@@ -1,16 +1,16 @@
 import streamlit as st
-from langchain.vectorstores import Chroma
+from langchain_community.vectorstores import Chroma
 from langchain_community.embeddings import HuggingFaceEmbeddings
-from langchain.text_splitter import RecursiveCharacterTextSplitter
+from langchain_text_splitters import RecursiveCharacterTextSplitter
 from langchain_community.document_loaders import TextLoader
 from langchain_ollama import OllamaLLM
-from langchain.prompts import PromptTemplate
-from langchain.chains import LLMChain
-from langchain.chains.combine_documents.stuff import StuffDocumentsChain
-from langchain.chains.retrieval_qa.base import RetrievalQA
+from langchain_core.prompts import PromptTemplate
+from langchain_classic.chains import LLMChain
+from langchain_classic.chains.combine_documents.stuff import StuffDocumentsChain
+from langchain_classic.chains.retrieval_qa.base import RetrievalQA
 import shutil
 import sys
-
+import os
 # Remove old DB
 shutil.rmtree("./chroma_db", ignore_errors=True)
 
@@ -40,7 +40,8 @@ def setup_qa():
     )
 
     retriever = vectorstore.as_retriever(search_kwargs={"k": 3})
-    llm = OllamaLLM(model="llama2")
+    ollama_base_url = os.getenv("OLLAMA_BASE_URL", "http://localhost:11434")
+    llm = OllamaLLM(model="llama2", base_url=ollama_base_url)
 
     prompt_template = PromptTemplate(
         input_variables=["context", "question"],
@@ -80,7 +81,7 @@ query = st.text_input("Your question:", placeholder="e.g. What is meditation?")
 
 if query:
     with st.spinner("Thinking..."):
-        docs = retriever.get_relevant_documents(query)
+        docs = retriever.invoke(query)
         context = "\n\n".join([doc.page_content for doc in docs])
         prompt = prompt_template.format(context=context, question=query)
 
