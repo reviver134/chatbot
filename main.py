@@ -1,33 +1,30 @@
 import streamlit as st
+import shutil
+import os
+import sys
 from langchain_community.vectorstores import Chroma
 from langchain_community.embeddings import HuggingFaceEmbeddings
 from langchain_text_splitters import RecursiveCharacterTextSplitter
 from langchain_community.document_loaders import TextLoader
-from langchain_ollama import OllamaLLM
-from langchain_core.prompts import PromptTemplate
-from langchain_classic.chains import LLMChain
-from langchain_classic.chains.combine_documents.stuff import StuffDocumentsChain
-from langchain_classic.chains.retrieval_qa.base import RetrievalQA
-import shutil
-import sys
-import os
-# Remove old DB
-shutil.rmtree("./chroma_db", ignore_errors=True)
+from langchain_google_genai import ChatGoogleGenerativeAI
+from langchain_core.prompts import ChatPromptTemplate
+from langchain.chains import create_retrieval_chain
+from langchain.chains.combine_documents import create_stuff_documents_chain
 
-# Fix torch issue in Streamlit
+# --- HOUSEKEEPING ---
+shutil.rmtree("./chroma_db", ignore_errors=True)
 if 'torch.classes' in sys.modules:
     del sys.modules['torch.classes']
 
-# Setup QA system
+# --- SETUP QA SYSTEM ---
 @st.cache_resource
 def setup_qa():
     loader = TextLoader("text.txt")
     documents = loader.load()
 
     text_splitter = RecursiveCharacterTextSplitter(
-        chunk_size=100,
-        chunk_overlap=5,
-        separators=[r"\n\n", r"\n", r"?<=\.", "!", "?", ",", " ", ""]
+        chunk_size=500, # Increased size for better context
+        chunk_overlap=50
     )
     chunks = text_splitter.split_documents(documents)
 
@@ -40,59 +37,46 @@ def setup_qa():
     )
 
     retriever = vectorstore.as_retriever(search_kwargs={"k": 3})
-    ollama_base_url = os.getenv("OLLAMA_BASE_URL", "http://localhost:11434")
-    llm = OllamaLLM(model="llama2", base_url=ollama_base_url)
-
-    prompt_template = PromptTemplate(
-        input_variables=["context", "question"],
-        template=(
-            "Use the following context to answer the question.\n\n"
-            "Context:\n{context}\n\n"
-            "Question:\n{question}\n\n"
-            "Answer:"
-        )
+    
+    llm = ChatGoogleGenerativeAI(
+        model="gemini-1.5-flash",
+        google_api_key=os.getenv("API_KEY"),
+        temperature=0
     )
 
-    llm_chain = LLMChain(llm=llm, prompt=prompt_template, verbose=False)
+    # MODERN PROMPT TEMPLATE
+    prompt = ChatPromptTemplate.from_template("""
+    Use the following context to answer the question.
+    If you don't know the answer, just say you don't know.
+    
+    Context:
+    {context}
+    
+    Question: {input}
+    
+    Answer:
+    """)
 
-    combine_documents_chain = StuffDocumentsChain(
-        llm_chain=llm_chain,
-        document_variable_name="context",
-        verbose=False
-    )
+    # MODERN CHAINS
+    combine_docs_chain = create_stuff_documents_chain(llm, prompt)
+    rag_chain = create_retrieval_chain(retriever, combine_docs_chain)
 
-    qa_chain = RetrievalQA(
-        retriever=retriever,
-        combine_documents_chain=combine_documents_chain,
-        return_source_documents=True,
-        verbose=False
-    )
+    return rag_chain
 
-    return qa_chain, retriever, prompt_template
+rag_chain = setup_qa()
 
-
-qa_chain, retriever, prompt_template = setup_qa()
-
-# Streamlit UI, That would soon be changed
-st.title("📚 RAG Chatbot with LangChain + Ollama")
-st.markdown("Ask me anything based on the content of `text.txt`.")
-
-query = st.text_input("Your question:", placeholder="e.g. What is meditation?")
+# --- STREAMLIT UI ---
+st.title("📚 Modern RAG Chatbot (LangChain + Gemini)")
+query = st.text_input("Your question:")
 
 if query:
     with st.spinner("Thinking..."):
-        docs = retriever.invoke(query)
-        context = "\n\n".join([doc.page_content for doc in docs])
-        prompt = prompt_template.format(context=context, question=query)
-
-        st.subheader("🔍 Prompt sent to LLM")
-        st.code(prompt)
-
-        result = qa_chain({"query": query})
+        # The invoke method is the standard LCEL way to run chains
+        response = rag_chain.invoke({"input": query})
 
         st.subheader("✅ Answer")
-        st.write(result["result"])
+        st.write(response["answer"])
 
         st.subheader("📄 Sources")
-        for i, doc in enumerate(result["source_documents"]):
+        for i, doc in enumerate(response["context"]):
             st.markdown(f"**Source {i+1}:** {doc.metadata.get('source', 'text.txt')}")
